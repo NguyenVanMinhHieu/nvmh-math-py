@@ -25,4 +25,4 @@ nvmh-math-py "(x^2 + 2*x - 3)/(x - 3)"
 ```
 
 ## 🛠️ Tác giả
-- **Thầy Nguyễn Văn Minh Hiếu** - Giáo viên Toán THPT.
+- **Thầy Nguyễn Văn Minh Hiếu** - Giáo viên Toán THPT TRUNG PHÚ.
