@@ -188,8 +188,8 @@ HTML_CONTENT = r"""<!DOCTYPE html>
       <div class="card">
         <div class="tab-bar">
           <div class="tab-buttons">
-            <button class="tab-btn active" id="tab-vgraph">🖼️ Đồ thị Oxy</button>
-            <button class="tab-btn" id="tab-vtable">📋 Bảng biến thiên</button>
+            <button class="tab-btn active" id="tab-vgraph">🖼️ Ảnh PNG Đồ thị</button>
+            <button class="tab-btn" id="tab-vtable">📋 Ảnh PNG BBT</button>
             <button class="tab-btn" id="tab-bbt">📊 Mã tkz-tab</button>
             <button class="tab-btn" id="tab-graph">📈 Mã TikZ Oxy</button>
             <button class="tab-btn" id="tab-typst">📄 Mã Typst</button>
