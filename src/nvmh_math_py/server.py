@@ -324,3 +324,38 @@ HTML_CONTENT = r"""<!DOCTYPE html>
 </body>
 </html>
 """
+"""
+
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_index() -> HTMLResponse:
+    return HTMLResponse(content=HTML_CONTENT)
+
+
+def main():
+    """Hàm khởi chạy máy chủ tự động chọn cổng hoặc nhận từ môi trường Cloud."""
+    import os
+    import socket
+    import uvicorn
+
+    env_port = os.environ.get("PORT")
+    if env_port:
+        port = int(env_port)
+        host = "0.0.0.0"
+    else:
+        host = "0.0.0.0"
+        port = 8888
+        while port < 65535:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                if s.connect_ex(("127.0.0.1", port)) != 0:
+                    break
+                port += 1
+
+    print("\n" + "=" * 50)
+    print(f"🚀 MÁY CHỦ SẴN SÀNG TẠI: http://{host}:{port}")
+    print("=" * 50 + "\n")
+    uvicorn.run("nvmh_math_py.server:app", host=host, port=port)
+
+
+if __name__ == "__main__":
+    main()
