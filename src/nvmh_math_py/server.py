@@ -341,18 +341,24 @@ def main():
     import socket
     import uvicorn
 
-    start_port = 8888
-    port = start_port
-    while port < 65535:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", port)) != 0:
-                break
-            port += 1
+    import os
+    env_port = os.environ.get("PORT")
+    if env_port:
+        port = int(env_port)
+        host = "0.0.0.0"
+    else:
+        host = "0.0.0.0"
+        port = 8888
+        while port < 65535:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                if s.connect_ex(("127.0.0.1", port)) != 0:
+                    break
+                port += 1
 
     print("\n" + "=" * 50)
-    print(f"🚀 MÁY CHỦ SẴN SÀNG TẠI: http://127.0.0.1:{port}")
+    print(f"🚀 MÁY CHỦ SẴN SÀNG TẠI: http://{host}:{port}")
     print("=" * 50 + "\n")
-    uvicorn.run("nvmh_math_py.server:app", host="127.0.0.1", port=port, reload=True)
+    uvicorn.run("nvmh_math_py.server:app", host=host, port=port)
 
 
 if __name__ == "__main__":
