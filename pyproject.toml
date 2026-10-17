@@ -1,0 +1,24 @@
+[project]
+name = "nvmh-math-py"
+version = "0.1.0"
+description = "Hệ thống hỗ trợ giảng dạy và nghiên cứu Toán học THPT"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.110.0",
+    "pytest>=9.1.1",
+    "sympy>=1.14.0",
+    "uvicorn[standard]>=0.28.0",
+]
+
+[project.scripts]
+nvmh-math-py = "nvmh_math_py.cli:main"
+nvmh-math-server = "nvmh_math_py.server:main"
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
