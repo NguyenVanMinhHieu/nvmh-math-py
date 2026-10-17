@@ -6,6 +6,9 @@ Hệ sinh thái phần mềm mã nguồn mở hỗ trợ nghiên cứu, giảng 
 - **Mô hình Hình học Song ánh (Geometric IR):** Ánh xạ đối xứng 1-1 chính xác từng milimet giữa LaTeX (TikZ + tkz-tab) và Typst (CeTZ 0.5.2).
 - **Giao diện:** Web Studio Dark Mode hiện đại (FastAPI + MathJax 3) cùng công cụ dòng lệnh (CLI).
 
+
+> 🌐 **Dùng thử trực tiếp trên Web (24/7):** [https://nvmh-math-py.onrender.com/](https://nvmh-math-py.onrender.com/)
+
 ## 🚀 Cài đặt nhanh qua uv
 
 ```bash
