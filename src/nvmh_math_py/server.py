@@ -324,7 +324,6 @@ HTML_CONTENT = r"""<!DOCTYPE html>
 </body>
 </html>
 """
-"""
 
 
 @app.get("/", response_class=HTMLResponse)
