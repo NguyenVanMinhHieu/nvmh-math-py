@@ -12,6 +12,8 @@ import sympy as sp
 from nvmh_math_py.analyzer import analyze_function
 from nvmh_math_py.tikz import generate_tkz_tab, generate_graph_tikz
 from nvmh_math_py.typst import generate_typst_document
+from nvmh_math_py.svg import generate_graph_svg, generate_table_svg
+from nvmh_math_py.geometry_ir import build_geometric_scene
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nvmh-arch_math_server")
@@ -33,6 +35,8 @@ class AnalyzeResponse(BaseModel):
     tikz_graph: str
     tikz_graph_body: str
     typst_doc: str
+    graph_svg: str = ""
+    table_svg: str = ""
     message: Optional[str] = None
 
 
@@ -49,6 +53,9 @@ async def api_analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         graph_full = generate_graph_tikz(analysis, standalone=True)
         graph_body = generate_graph_tikz(analysis, standalone=False)
         typst_code = generate_typst_document(analysis)
+        scene = build_geometric_scene(analysis)
+        g_svg = generate_graph_svg(scene)
+        t_svg = generate_table_svg(scene)
 
         return AnalyzeResponse(
             success=True,
@@ -60,6 +67,8 @@ async def api_analyze(req: AnalyzeRequest) -> AnalyzeResponse:
             tikz_graph=graph_full,
             tikz_graph_body=graph_body,
             typst_doc=typst_code,
+            graph_svg=g_svg,
+            table_svg=t_svg,
         )
     except Exception as exc:
         logger.error("Lỗi khi khảo sát hàm '%s': %s", formula, exc)
@@ -179,16 +188,21 @@ HTML_CONTENT = r"""<!DOCTYPE html>
       <div class="card">
         <div class="tab-bar">
           <div class="tab-buttons">
-            <button class="tab-btn active" id="tab-bbt">📊 tkz-tab</button>
-            <button class="tab-btn" id="tab-graph">📈 TikZ Oxy</button>
-            <button class="tab-btn" id="tab-typst">📄 Typst (.typ)</button>
+            <button class="tab-btn active" id="tab-vgraph">🖼️ Đồ thị Oxy</button>
+            <button class="tab-btn" id="tab-vtable">📋 Bảng biến thiên</button>
+            <button class="tab-btn" id="tab-bbt">📊 Mã tkz-tab</button>
+            <button class="tab-btn" id="tab-graph">📈 Mã TikZ Oxy</button>
+            <button class="tab-btn" id="tab-typst">📄 Mã Typst</button>
           </div>
           <div class="action-group">
             <button class="copy-btn" id="btn-copy">📋 Sao chép</button>
             <button class="copy-btn" id="btn-download">💾 Tải file</button>
           </div>
         </div>
-        <pre><code id="tikz-output">Đang khởi tạo...</code></pre>
+        <div id="image-viewer" style="background:#ffffff; border-radius:8px; padding:12px; min-height:420px; display:flex; align-items:center; justify-content:center; overflow:auto;">
+          <div id="svg-container" style="width:100%; text-align:center;">Đang tải hình ảnh...</div>
+        </div>
+        <pre id="code-viewer" style="display:none;"><code id="tikz-output">Đang khởi tạo...</code></pre>
       </div>
     </div>
   </div>
@@ -204,162 +218,109 @@ HTML_CONTENT = r"""<!DOCTYPE html>
       setTimeout(() => t.classList.remove('show'), 2500);
     };
 
-    let activeTab = 'bbt'; // 'bbt', 'graph', hoặc 'typst'
+    let activeTab = 'vgraph'; // 'vgraph', 'vtable', 'bbt', 'graph', 'typst'
     let currentData = null;
 
     function renderActiveTab() {
       if (!currentData || !currentData.success) return;
-      if (activeTab === 'bbt') {
-        $('tikz-output').textContent = currentData.tikz_tab;
-      } else if (activeTab === 'graph') {
-        $('tikz-output').textContent = currentData.tikz_graph;
+      const imgViewer = $('image-viewer');
+      const codeViewer = $('code-viewer');
+      const btnCopy = $('btn-copy');
+      const btnDownload = $('btn-download');
+
+      if (activeTab === 'vgraph') {
+        imgViewer.style.display = 'flex';
+        codeViewer.style.display = 'none';
+        $('svg-container').innerHTML = currentData.graph_svg;
+        btnCopy.style.display = 'none';
+        btnDownload.textContent = '💾 Tải ảnh PNG (Đồ thị)';
+      } else if (activeTab === 'vtable') {
+        imgViewer.style.display = 'flex';
+        codeViewer.style.display = 'none';
+        $('svg-container').innerHTML = currentData.table_svg;
+        btnCopy.style.display = 'none';
+        btnDownload.textContent = '💾 Tải ảnh PNG (Bảng biến thiên)';
       } else {
-        $('tikz-output').textContent = currentData.typst_doc;
-      }
-    }
-
-    $('tab-bbt').onclick = () => {
-      activeTab = 'bbt';
-      $('tab-bbt').classList.add('active');
-      $('tab-graph').classList.remove('active');
-      $('tab-typst').classList.remove('active');
-      renderActiveTab();
-    };
-
-    $('tab-graph').onclick = () => {
-      activeTab = 'graph';
-      $('tab-graph').classList.add('active');
-      $('tab-bbt').classList.remove('active');
-      $('tab-typst').classList.remove('active');
-      renderActiveTab();
-    };
-
-    $('tab-typst').onclick = () => {
-      activeTab = 'typst';
-      $('tab-typst').classList.add('active');
-      $('tab-bbt').classList.remove('active');
-      $('tab-graph').classList.remove('active');
-      renderActiveTab();
-    };
-
-    async function analyze() {
-      const formula = $('formula').value.trim();
-      if (!formula) return;
-
-      $('tikz-output').textContent = 'SymPy CAS đang phân tích giải tích và sinh mã nguồn xuất bản...';
-
-      try {
-        const res = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ formula })
-        });
-        currentData = await res.json();
-
-        if (!currentData.success) {
-          $('tikz-output').textContent = currentData.message || 'Không thể khảo sát hàm số này.';
-          return;
+        imgViewer.style.display = 'none';
+        codeViewer.style.display = 'block';
+        btnCopy.style.display = 'inline-block';
+        if (activeTab === 'bbt') {
+          $('tikz-output').textContent = currentData.tikz_tab;
+          btnDownload.textContent = '💾 Tải file .tex';
+        } else if (activeTab === 'graph') {
+          $('tikz-output').textContent = currentData.tikz_graph;
+          btnDownload.textContent = '💾 Tải file .tex';
+        } else {
+          $('tikz-output').textContent = currentData.typst_doc;
+          btnDownload.textContent = '💾 Tải file .typ';
         }
-
-        // Render công thức MathJax chuẩn mực
-        $('render-f').innerHTML = `$$ y = ${currentData.expr_latex} $$`;
-        $('render-df').innerHTML = `$$ y' = ${currentData.diff_latex} $$`;
-        if (window.MathJax) { MathJax.typesetPromise(); }
-
-        renderActiveTab();
-      } catch (err) {
-        $('tikz-output').textContent = 'Lỗi kết nối máy chủ: ' + err.message;
       }
     }
 
-    $('btn-analyze').onclick = analyze;
-    $('formula').onkeydown = e => { if (e.key === 'Enter') analyze(); };
+    function setTab(tabName) {
+      activeTab = tabName;
+      ['vgraph', 'vtable', 'bbt', 'graph', 'typst'].forEach(t => {
+        const el = $('tab-' + t);
+        if (el) el.classList.toggle('active', t === tabName);
+      });
+      renderActiveTab();
+    }
 
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-      btn.onclick = () => {
-        $('formula').value = btn.dataset.val;
-        analyze();
+    $('tab-vgraph').onclick = () => setTab('vgraph');
+    $('tab-vtable').onclick = () => setTab('vtable');
+    $('tab-bbt').onclick = () => setTab('bbt');
+    $('tab-graph').onclick = () => setTab('graph');
+    $('tab-typst').onclick = () => setTab('typst');
+
+    function downloadSvgAsPng(svgElement, filename) {
+      const svgString = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const URL = window.URL || window.webkitURL || window;
+      const blobURL = URL.createObjectURL(svgBlob);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = 2.5; // Xuất ảnh PNG độ phân giải cực cao (Retina 300 DPI)
+        const bbox = svgElement.viewBox.baseVal;
+        canvas.width = (bbox.width || svgElement.clientWidth) * scale;
+        canvas.height = (bbox.height || svgElement.clientHeight) * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const pngURL = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.download = filename;
+        a.href = pngURL;
+        a.click();
+        URL.revokeObjectURL(blobURL);
+        toast('Đã tải ảnh PNG thành công!');
       };
-    });
-
-    $('btn-copy').onclick = async () => {
-      if (!currentData || !currentData.success) return;
-      let snippet = '';
-      let msg = '';
-      if (activeTab === 'bbt') {
-        snippet = currentData.tikz_tab_body;
-        msg = 'Đã sao chép mã Bảng biến thiên tkz-tab!';
-      } else if (activeTab === 'graph') {
-        snippet = currentData.tikz_graph_body;
-        msg = 'Đã sao chép mã Đồ thị TikZ!';
-      } else {
-        snippet = currentData.typst_doc;
-        msg = 'Đã sao chép toàn bộ mã Báo cáo Typst!';
-      }
-      await navigator.clipboard.writeText(snippet);
-      toast(msg);
-    };
-
+      image.src = blobURL;
+    }
     $('btn-download').onclick = () => {
       if (!currentData || !currentData.success) return;
-      let fullCode = '';
-      let filename = '';
-      if (activeTab === 'bbt') {
-        fullCode = currentData.tikz_tab;
-        filename = 'bang-bien-thien.tex';
-      } else if (activeTab === 'graph') {
-        fullCode = currentData.tikz_graph;
-        filename = 'do-thi-oxy.tex';
+      if (activeTab === 'vgraph') {
+        const svg = $('svg-container').querySelector('svg');
+        if (svg) downloadSvgAsPng(svg, 'do-thi-oxy.png');
+      } else if (activeTab === 'vtable') {
+        const svg = $('svg-container').querySelector('svg');
+        if (svg) downloadSvgAsPng(svg, 'bang-bien-thien.png');
       } else {
-        fullCode = currentData.typst_doc;
-        filename = 'khao_sat.typ';
+        let fullCode = activeTab === 'bbt' ? currentData.tikz_tab : (activeTab === 'graph' ? currentData.tikz_graph : currentData.typst_doc);
+        let filename = activeTab === 'typst' ? 'khao_sat.typ' : (activeTab === 'bbt' ? 'bang-bien-thien.tex' : 'do-thi-oxy.tex');
+        const blob = new Blob([fullCode], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Đã tải xuống ' + filename);
       }
-      const blob = new Blob([fullCode], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast('Đã tải xuống ' + filename);
     };
-
     window.onload = analyze;
   </script>
 </body>
 </html>
 """
-
-
-@app.get("/", response_class=HTMLResponse)
-async def serve_index() -> HTMLResponse:
-    return HTMLResponse(content=HTML_CONTENT)
-
-
-def main():
-    """Hàm khởi chạy máy chủ tự động chọn cổng trống riêng biệt."""
-    import socket
-    import uvicorn
-
-    import os
-    env_port = os.environ.get("PORT")
-    if env_port:
-        port = int(env_port)
-        host = "0.0.0.0"
-    else:
-        host = "0.0.0.0"
-        port = 8888
-        while port < 65535:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex(("127.0.0.1", port)) != 0:
-                    break
-                port += 1
-
-    print("\n" + "=" * 50)
-    print(f"🚀 MÁY CHỦ SẴN SÀNG TẠI: http://{host}:{port}")
-    print("=" * 50 + "\n")
-    uvicorn.run("nvmh_math_py.server:app", host=host, port=port)
-
-
-if __name__ == "__main__":
-    main()
