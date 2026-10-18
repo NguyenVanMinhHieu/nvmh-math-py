@@ -5,7 +5,8 @@ import logging
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from pathlib import Path
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import sympy as sp
 
@@ -23,6 +24,10 @@ app = FastAPI(title="NVMH MATH-ARCH", version="1.2.0")
 
 class AnalyzeRequest(BaseModel):
     formula: str
+    x_min: Optional[float] = None
+    x_max: Optional[float] = None
+    y_min: Optional[float] = None
+    y_max: Optional[float] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -53,7 +58,9 @@ async def api_analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         graph_full = generate_graph_tikz(analysis, standalone=True)
         graph_body = generate_graph_tikz(analysis, standalone=False)
         typst_code = generate_typst_document(analysis)
-        scene = build_geometric_scene(analysis)
+        x_range = (req.x_min, req.x_max) if req.x_min is not None and req.x_max is not None else (-6.0, 6.0)
+        y_range = (req.y_min, req.y_max) if req.y_min is not None and req.y_max is not None else (-6.0, 6.0)
+        scene = build_geometric_scene(analysis, x_range=x_range, y_range=y_range)
         g_svg = generate_graph_svg(scene)
         t_svg = generate_table_svg(scene)
 
@@ -86,249 +93,13 @@ async def api_analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         )
 
 
-HTML_CONTENT = r"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NVMH MATH-ARCH · SymPy CAS & Typst/TikZ Studio</title>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
-  <style>
-    :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --border: #334155;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --accent: #10b981;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background-color: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
-    .container { max-width: 1360px; margin: 0 auto; }
-    header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
-    header h1 { font-size: 1.5rem; color: #60a5fa; display: flex; align-items: center; gap: 8px; }
-    .badge { background: #1e3a8a; color: #93c5fd; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-    
-    .grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 24px; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-    
-    .card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
-    .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center; }
-    
-    label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; }
-    .input-row { display: flex; gap: 8px; margin-bottom: 16px; }
-    input[type="text"] { flex: 1; background: #0f172a; border: 1px solid var(--border); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 1.05rem; outline: none; }
-    input[type="text"]:focus { border-color: var(--primary); }
-    
-    button { cursor: pointer; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 600; transition: all 0.2s; }
-    button.primary { background: var(--primary); color: #fff; }
-    button.primary:hover { background: var(--primary-hover); }
-    
-    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
-    .preset-btn { background: #1e293b; border: 1px solid var(--border); color: #94a3b8; font-size: 0.8rem; padding: 6px 11px; border-radius: 6px; }
-    .preset-btn:hover { background: #334155; color: #fff; }
-    
-    .math-preview { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-height: 100px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 16px; }
-    .diff-info { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
-    
-    /* Tabs chuyển đổi giữa BBT, Đồ thị và Typst */
-    .tab-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; justify-content: space-between; align-items: center; }
-    .tab-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tab-btn { background: transparent; color: var(--text-muted); padding: 8px 12px; font-size: 0.85rem; border-radius: 6px; }
-    .tab-btn.active { background: var(--primary); color: #fff; }
-    
-    .action-group { display: flex; gap: 6px; }
-    button.copy-btn { background: #334155; color: #f1f5f9; font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; }
-    button.copy-btn:hover { background: #475569; }
-    
-    pre { background: #090d16; border: 1px solid var(--border); border-radius: 8px; padding: 14px; color: #a5b4fc; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 0.85rem; overflow-x: auto; height: 420px; }
-    
-    .toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent); color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; }
-    .toast.show { opacity: 1; transform: translateY(0); }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>NVMH MATH-ARCH <span class="badge">SymPy CAS + TikZ + Typst</span></h1>
-      <span style="color: var(--text-muted); font-size: 0.85rem;">Khảo sát tự động & Xuất bản chuyên nghiệp</span>
-    </header>
+INDEX_HTML_PATH = Path(__file__).parent / "index.html"
 
-    <div class="grid">
-      <!-- Cột trái: Nhập liệu và Phân tích Giải tích -->
-      <div class="card">
-        <h2>Nhập hàm số khảo sát</h2>
-        <label for="formula">Công thức f(x)</label>
-        <div class="input-row">
-          <input type="text" id="formula" value="(x^2 + 2*x - 3)/(x + 1)" placeholder="Nhập hàm số, ví dụ: x^3 - 3*x">
-          <button class="primary" id="btn-analyze">Khảo sát</button>
-        </div>
-
-        <label>Các hàm mẫu quen thuộc:</label>
-        <div class="presets">
-          <button class="preset-btn" data-val="x^4 - 4*x^2 - 1">Trùng phương</button>
-          <button class="preset-btn" data-val="x^3 - 3*x">Bậc 3</button>
-          <button class="preset-btn" data-val="(2*x - 1)/(x + 1)">Phân thức 1/1</button>
-          <button class="preset-btn" data-val="(x^2 + 2*x - 3)/(x + 1)">Phân thức 2/1</button>
-          <button class="preset-btn" data-val="ln(x)/x^2">y = ln(x)/x^2</button>
-          <button class="preset-btn" data-val="x*exp(-x)">y = x·e⁻ˣ</button>
-          <button class="preset-btn" data-val="sqrt(x^2 + 1)">Căn thức</button>
-        </div>
-
-        <h2>Kết quả giải tích biểu tượng</h2>
-        <div class="math-preview">
-          <div id="render-f">$$ y = \dots $$</div>
-          <div class="diff-info" id="render-df">$$ y' = \dots $$</div>
-        </div>
-      </div>
-
-      <!-- Cột phải: Mã nguồn xuất bản với 3 Tab -->
-      <div class="card">
-        <div class="tab-bar">
-          <div class="tab-buttons">
-            <button class="tab-btn active" id="tab-vgraph">🖼️ Ảnh PNG Đồ thị</button>
-            <button class="tab-btn" id="tab-vtable">📋 Ảnh PNG BBT</button>
-            <button class="tab-btn" id="tab-bbt">📊 Mã tkz-tab</button>
-            <button class="tab-btn" id="tab-graph">📈 Mã TikZ Oxy</button>
-            <button class="tab-btn" id="tab-typst">📄 Mã Typst</button>
-          </div>
-          <div class="action-group">
-            <button class="copy-btn" id="btn-copy">📋 Sao chép</button>
-            <button class="copy-btn" id="btn-download">💾 Tải file</button>
-          </div>
-        </div>
-        <div id="image-viewer" style="background:#ffffff; border-radius:8px; padding:12px; min-height:420px; display:flex; align-items:center; justify-content:center; overflow:auto;">
-          <div id="svg-container" style="width:100%; text-align:center;">Đang tải hình ảnh...</div>
-        </div>
-        <pre id="code-viewer" style="display:none;"><code id="tikz-output">Đang khởi tạo...</code></pre>
-      </div>
-    </div>
-  </div>
-
-  <div id="toast" class="toast">Đã thực hiện xong!</div>
-
-  <script>
-    const $ = id => document.getElementById(id);
-    const toast = msg => {
-      const t = $('toast');
-      t.textContent = msg;
-      t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 2500);
-    };
-
-    let activeTab = 'vgraph'; // 'vgraph', 'vtable', 'bbt', 'graph', 'typst'
-    let currentData = null;
-
-    function renderActiveTab() {
-      if (!currentData || !currentData.success) return;
-      const imgViewer = $('image-viewer');
-      const codeViewer = $('code-viewer');
-      const btnCopy = $('btn-copy');
-      const btnDownload = $('btn-download');
-
-      if (activeTab === 'vgraph') {
-        imgViewer.style.display = 'flex';
-        codeViewer.style.display = 'none';
-        $('svg-container').innerHTML = currentData.graph_svg;
-        btnCopy.style.display = 'none';
-        btnDownload.textContent = '💾 Tải ảnh PNG (Đồ thị)';
-      } else if (activeTab === 'vtable') {
-        imgViewer.style.display = 'flex';
-        codeViewer.style.display = 'none';
-        $('svg-container').innerHTML = currentData.table_svg;
-        btnCopy.style.display = 'none';
-        btnDownload.textContent = '💾 Tải ảnh PNG (Bảng biến thiên)';
-      } else {
-        imgViewer.style.display = 'none';
-        codeViewer.style.display = 'block';
-        btnCopy.style.display = 'inline-block';
-        if (activeTab === 'bbt') {
-          $('tikz-output').textContent = currentData.tikz_tab;
-          btnDownload.textContent = '💾 Tải file .tex';
-        } else if (activeTab === 'graph') {
-          $('tikz-output').textContent = currentData.tikz_graph;
-          btnDownload.textContent = '💾 Tải file .tex';
-        } else {
-          $('tikz-output').textContent = currentData.typst_doc;
-          btnDownload.textContent = '💾 Tải file .typ';
-        }
-      }
-    }
-
-    function setTab(tabName) {
-      activeTab = tabName;
-      ['vgraph', 'vtable', 'bbt', 'graph', 'typst'].forEach(t => {
-        const el = $('tab-' + t);
-        if (el) el.classList.toggle('active', t === tabName);
-      });
-      renderActiveTab();
-    }
-
-    $('tab-vgraph').onclick = () => setTab('vgraph');
-    $('tab-vtable').onclick = () => setTab('vtable');
-    $('tab-bbt').onclick = () => setTab('bbt');
-    $('tab-graph').onclick = () => setTab('graph');
-    $('tab-typst').onclick = () => setTab('typst');
-
-    function downloadSvgAsPng(svgElement, filename) {
-      const svgString = new XMLSerializer().serializeToString(svgElement);
-      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-      const URL = window.URL || window.webkitURL || window;
-      const blobURL = URL.createObjectURL(svgBlob);
-      const image = new Image();
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale = 2.5; // Xuất ảnh PNG độ phân giải cực cao (Retina 300 DPI)
-        const bbox = svgElement.viewBox.baseVal;
-        canvas.width = (bbox.width || svgElement.clientWidth) * scale;
-        canvas.height = (bbox.height || svgElement.clientHeight) * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const pngURL = canvas.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.download = filename;
-        a.href = pngURL;
-        a.click();
-        URL.revokeObjectURL(blobURL);
-        toast('Đã tải ảnh PNG thành công!');
-      };
-      image.src = blobURL;
-    }
-    $('btn-download').onclick = () => {
-      if (!currentData || !currentData.success) return;
-      if (activeTab === 'vgraph') {
-        const svg = $('svg-container').querySelector('svg');
-        if (svg) downloadSvgAsPng(svg, 'do-thi-oxy.png');
-      } else if (activeTab === 'vtable') {
-        const svg = $('svg-container').querySelector('svg');
-        if (svg) downloadSvgAsPng(svg, 'bang-bien-thien.png');
-      } else {
-        let fullCode = activeTab === 'bbt' ? currentData.tikz_tab : (activeTab === 'graph' ? currentData.tikz_graph : currentData.typst_doc);
-        let filename = activeTab === 'typst' ? 'khao_sat.typ' : (activeTab === 'bbt' ? 'bang-bien-thien.tex' : 'do-thi-oxy.tex');
-        const blob = new Blob([fullCode], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast('Đã tải xuống ' + filename);
-      }
-    };
-    window.onload = analyze;
-  </script>
-</body>
-</html>
-"""
-
-
-@app.get("/", response_class=HTMLResponse)
-async def serve_index() -> HTMLResponse:
-    return HTMLResponse(content=HTML_CONTENT)
+@app.get("/", response_class=FileResponse)
+async def serve_index() -> FileResponse:
+    if not INDEX_HTML_PATH.is_file():
+        raise HTTPException(status_code=404, detail="File index.html không tồn tại.")
+    return FileResponse(INDEX_HTML_PATH, media_type="text/html")
 
 
 def main():

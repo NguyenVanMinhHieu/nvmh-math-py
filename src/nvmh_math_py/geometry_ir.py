@@ -272,9 +272,108 @@ def build_geometric_scene(
     if expr is None:
         raise ValueError("Thiếu biểu thức hàm số 'expr' trong FunctionAnalysis.")
 
-    x_min, x_max = float(x_range[0]), float(x_range[1])
-    y_min, y_max = float(y_range[0]), float(y_range[1])
+    # --- SYMMETRIC 2D ADAPTIVE VIEWPORT (THẦY NGUYỄN VĂN MINH HIẾU) ---
+    raw_asymptotes = getattr(analysis, 'asymptotes', [])
+    extrema_list = getattr(analysis, 'extrema', [])
+    inflection_list = getattr(analysis, 'inflection_points', [])
 
+    xs = [0.0]
+    ys = [0.0]
+
+    # Giao điểm trục tung (0, f(0))
+    try:
+        y0_val = _to_float(expr.subs(sp.Symbol('x'), 0))
+        if y0_val is not None and abs(y0_val) < 1000:
+            ys.append(y0_val)
+    except Exception:
+        pass
+
+    vert_poles_list = []
+    horiz_lines_list = []
+    oblique_lines_list = []
+
+    for item in raw_asymptotes:
+        k = getattr(item, 'kind', '')
+        p = getattr(item, 'params', {})
+        if k == 'vertical':
+            v = _to_float(p.get('x0', p.get('x')))
+            if v is not None:
+                vert_poles_list.append(v)
+                xs.append(v)
+        elif k == 'horizontal':
+            h = _to_float(p.get('y0', p.get('y')))
+            if h is not None:
+                horiz_lines_list.append(h)
+                ys.append(h)
+        elif k == 'oblique':
+            a = _to_float(p.get('a', 1.0))
+            b = _to_float(p.get('b', 0.0))
+            if a is not None and b is not None:
+                oblique_lines_list.append((a, b))
+
+    for ext in extrema_list:
+        xv = _to_float(getattr(ext, 'x', None))
+        yv = _to_float(getattr(ext, 'y', None))
+        if xv is not None: xs.append(xv)
+        if yv is not None: ys.append(yv)
+
+    for ip in inflection_list:
+        xv = _to_float(getattr(ip, 'x', None))
+        yv = _to_float(getattr(ip, 'y', None))
+        if xv is not None: xs.append(xv)
+        if yv is not None: ys.append(yv)
+
+    # XÁC ĐỊNH TÂM ĐỐI XỨNG HÌNH HỌC I(cx, cy)
+    cx, cy = 0.0, 0.0
+    has_center = False
+
+    if vert_poles_list:
+        cx = vert_poles_list[0]
+        has_center = True
+        if horiz_lines_list:
+            cy = horiz_lines_list[0]
+        elif oblique_lines_list:
+            a, b = oblique_lines_list[0]
+            cy = a * cx + b
+        else:
+            cy = sum(ys) / len(ys) if ys else 0.0
+    elif inflection_list:
+        xv = _to_float(getattr(inflection_list[0], 'x', None))
+        yv = _to_float(getattr(inflection_list[0], 'y', None))
+        if xv is not None and yv is not None:
+            cx, cy = xv, yv
+            has_center = True
+
+    if not has_center:
+        cx = (min(xs) + max(xs)) / 2.0
+        cy = (min(ys) + max(ys)) / 2.0
+
+    max_dx = max([abs(x - cx) for x in xs] + [5.0])
+    rx = max(max_dx * 1.5, 6.0)
+
+    req_ry = [abs(y - cy) for y in ys] + [4.0]
+    if oblique_lines_list:
+        a, b = oblique_lines_list[0]
+        req_ry.append(abs(a) * rx + 3.0)
+
+    max_dy = max(req_ry)
+    ry = max_dy * 1.25
+
+    if x_range == (-6.0, 6.0):
+        x_min = round(cx - rx)
+        x_max = round(cx + rx)
+        if x_min >= x_max or (x_max - x_min) < 6.0:
+            x_min, x_max = -6.0, 6.0
+    else:
+        x_min, x_max = float(x_range[0]), float(x_range[1])
+
+    if y_range == (-6.0, 6.0):
+        y_min = round(cy - ry)
+        y_max = round(cy + ry)
+        if y_min >= y_max or (y_max - y_min) < 5.0:
+            y_min, y_max = -6.0, 6.0
+    else:
+        y_min, y_max = float(y_range[0]), float(y_range[1])
     # 1. Trích xuất tiệm cận và cực điểm
     raw_asymptotes = getattr(analysis, "asymptotes", [])
     vert_poles: List[float] = []

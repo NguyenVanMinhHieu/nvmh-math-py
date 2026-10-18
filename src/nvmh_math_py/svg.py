@@ -36,12 +36,20 @@ def generate_graph_svg(
     curve_color = "#2563eb"
     asym_color = "#ef4444"
 
+    clip_x = sx(x_min)
+    clip_y = sy(y_max)
+    clip_w = sx(x_max) - sx(x_min)
+    clip_h = sy(y_min) - sy(y_max)
+
     svg_parts: List[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="auto" style="background:{bg_color}; border-radius:8px; font-family:system-ui, sans-serif;">',
         '  <defs>',
         '    <marker id="arrow-axis" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
         f'      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="{axis_color}"/>',
         '    </marker>',
+        f'    <clipPath id="graph-viewport-clip">',
+        f'      <rect x="{clip_x:.1f}" y="{clip_y:.1f}" width="{clip_w:.1f}" height="{clip_h:.1f}"/>',
+        '    </clipPath>',
         '  </defs>',
         f'  <rect width="{width}" height="{height}" fill="{bg_color}"/>',
         '  <!-- 1. Lưới toạ độ phụ -->',
@@ -81,34 +89,31 @@ def generate_graph_svg(
             svg_parts.append(f'  <line x1="{ox-3:.1f}" y1="{py:.1f}" x2="{ox+3:.1f}" y2="{py:.1f}" stroke="{axis_color}" stroke-width="1.2"/>')
             svg_parts.append(f'  <text x="{ox-8:.1f}" y="{py+4:.1f}" font-size="10" fill="{text_color}" text-anchor="end">{yi}</text>')
 
-    # 4. Tiệm cận
-    svg_parts.append('\n  <!-- 3. Tiệm cận -->')
+    # 4. Tiệm cận, đường gióng và đồ thị f(x) ĐƯỢC CLIP GỌN TRONG LƯỚI TOẠ ĐỘ
+    svg_parts.append('\n  <!-- Vùng đồ thị & tiệm cận được Clip chuẩn xuất bản SGK -->')
+    svg_parts.append('  <g clip-path="url(#graph-viewport-clip)">')
     for asy in graph.asymptotes:
         x1, y1 = sx(asy.start.x), sy(asy.start.y)
         x2, y2 = sx(asy.end.x), sy(asy.end.y)
-        lx, ly = sx(asy.label_pos.x), sy(asy.label_pos.y)
-        svg_parts.append(f'  <line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{asym_color}" stroke-width="1.4" stroke-dasharray="6,4"/>')
-        svg_parts.append(f'  <text x="{lx:.1f}" y="{ly:.1f}" font-size="11" font-weight="600" fill="{asym_color}">{asy.typst_label}</text>')
-
-    # 5. Đường gióng và cực trị
-    svg_parts.append('\n  <!-- 4. Đường gióng và cực trị -->')
+        svg_parts.append(f'    <line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{asym_color}" stroke-width="1.4" stroke-dasharray="6,4"/>')
     for gl in graph.guide_lines:
         px, py = sx(gl.point.x), sy(gl.point.y)
         g_ox = sx(0.0)
         g_oy = sy(0.0)
-        svg_parts.append(f'  <polyline points="{px:.1f},{g_oy:.1f} {px:.1f},{py:.1f} {g_ox:.1f},{py:.1f}" fill="none" stroke="#64748b" stroke-width="1.0" stroke-dasharray="3,3"/>')
-
-    for cp in graph.critical_points:
-        cpx, cpy = sx(cp.x), sy(cp.y)
-        svg_parts.append(f'  <circle cx="{cpx:.1f}" cy="{cpy:.1f}" r="4.0" fill="#0f172a"/>')
-
-    # 6. Các nhánh đồ thị Hard-Clamping
-    svg_parts.append('\n  <!-- 5. Đồ thị hàm số f(x) -->')
+        svg_parts.append(f'    <polyline points="{px:.1f},{g_oy:.1f} {px:.1f},{py:.1f} {g_ox:.1f},{py:.1f}" fill="none" stroke="#64748b" stroke-width="1.0" stroke-dasharray="3,3"/>')
     for br in graph.branches:
         if len(br.points) >= 2:
             pts_str = " ".join([f"{sx(p.x):.1f},{sy(p.y):.1f}" for p in br.points])
-            svg_parts.append(f'  <polyline points="{pts_str}" fill="none" stroke="{curve_color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>')
+            svg_parts.append(f'    <polyline points="{pts_str}" fill="none" stroke="{curve_color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>')
+    svg_parts.append('  </g>')
 
+    # 5. Điểm cực trị và nhãn chữ tiệm cận (vẽ ngoài clip để không bị cắt chữ)
+    for cp in graph.critical_points:
+        cpx, cpy = sx(cp.x), sy(cp.y)
+        svg_parts.append(f'  <circle cx="{cpx:.1f}" cy="{cpy:.1f}" r="4.0" fill="#0f172a"/>')
+    for asy in graph.asymptotes:
+        lx, ly = sx(asy.label_pos.x), sy(asy.label_pos.y)
+        svg_parts.append(f'  <text x="{lx:.1f}" y="{ly:.1f}" font-size="11" font-weight="600" fill="{asym_color}">{asy.typst_label}</text>')
     svg_parts.append('</svg>')
     return "\n".join(svg_parts)
 
