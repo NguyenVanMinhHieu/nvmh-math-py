@@ -187,12 +187,32 @@ def generate_table_svg(
         elif pt.derivative_mark == "0":
             svg.append(f'  <text x="{xc:.1f}" y="{y_yprime:.1f}" font-size="14" fill="#0f172a" text-anchor="middle">0</text>')
 
-    # 3. Hàng y (Mũi tên và giá trị biến thiên)
+    # 3. Hàng y (Mũi tên và giá trị biến thiên chuẩn SGK THPT)
     for i, inv in enumerate(intervals):
         pt_l = pts[i]
         pt_r = pts[i+1]
-        x1 = x_coords[i] + 18.0
-        x2 = x_coords[i+1] - 18.0
+
+        # Độ thụt lề mũi tên & chữ tại vạch đôi
+        offset_l = 36.0 if pt_l.is_pole else 18.0
+        offset_r = 36.0 if pt_r.is_pole else 18.0
+        x1 = x_coords[i] + offset_l
+        x2 = x_coords[i+1] - offset_r
+
+        # Tọa độ và căn lề cho giá trị đầu (y_s_val)
+        if pt_l.is_pole:
+            pos_x_s = x_coords[i] + 12.0
+            anchor_s = "start"
+        else:
+            pos_x_s = x_coords[i]
+            anchor_s = "middle"
+
+        # Tọa độ và căn lề cho giá trị cuối (y_e_val)
+        if pt_r.is_pole:
+            pos_x_e = x_coords[i+1] - 12.0
+            anchor_e = "end"
+        else:
+            pos_x_e = x_coords[i+1]
+            anchor_e = "middle"
 
         y_s_val = inv.y_start_typst.replace("infinity", "∞")
         y_e_val = inv.y_end_typst.replace("infinity", "∞")
@@ -201,16 +221,16 @@ def generate_table_svg(
             y1, y2 = y_y_bot, y_y_top
             svg.append(f'  <line x1="{x1:.1f}" y1="{y1-5:.1f}" x2="{x2:.1f}" y2="{y2+8:.1f}" stroke="#0f172a" stroke-width="1.8" marker-end="url(#arr-up)"/>')
             if not ((i > 0) and (not pt_l.is_pole) and (pt_l.derivative_mark == "0")):
-                svg.append(f'  <text x="{x_coords[i]:.1f}" y="{y_y_bot+12:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">{y_s_val}</text>')
+                svg.append(f'  <text x="{pos_x_s:.1f}" y="{y_y_bot+12:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="{anchor_s}">{y_s_val}</text>')
             if not ((i < n_intervals - 1) and (not pt_r.is_pole) and (pt_r.derivative_mark == "0")):
-                svg.append(f'  <text x="{x_coords[i+1]:.1f}" y="{y_y_top-6:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">{y_e_val}</text>')
+                svg.append(f'  <text x="{pos_x_e:.1f}" y="{y_y_top-6:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="{anchor_e}">{y_e_val}</text>')
         else:
             y1, y2 = y_y_top, y_y_bot
             svg.append(f'  <line x1="{x1:.1f}" y1="{y1+8:.1f}" x2="{x2:.1f}" y2="{y2-5:.1f}" stroke="#1e293b" stroke-width="1.8" marker-end="url(#arr-dn)"/>')
             if not ((i > 0) and (not pt_l.is_pole) and (pt_l.derivative_mark == "0")):
-                svg.append(f'  <text x="{x_coords[i]:.1f}" y="{y_y_top-6:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">{y_s_val}</text>')
+                svg.append(f'  <text x="{pos_x_s:.1f}" y="{y_y_top-6:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="{anchor_s}">{y_s_val}</text>')
             if not ((i < n_intervals - 1) and (not pt_r.is_pole) and (pt_r.derivative_mark == "0")):
-                svg.append(f'  <text x="{x_coords[i+1]:.1f}" y="{y_y_bot+12:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">{y_e_val}</text>')
+                svg.append(f'  <text x="{pos_x_e:.1f}" y="{y_y_bot+12:.1f}" font-size="11" font-weight="600" fill="#0f172a" text-anchor="{anchor_e}">{y_e_val}</text>')
 
     # Giá trị cực đại / cực tiểu tại các đỉnh
     for i in range(1, len(pts) - 1):
