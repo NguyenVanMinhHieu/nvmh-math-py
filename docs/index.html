@@ -243,21 +243,25 @@
 
       try {
         pyodideInstance = await loadPyodide();
-        await pyodideInstance.loadPackage(['micropip', 'sympy']);
+        await pyodideInstance.loadPackage(['sympy']);
+
         const wheelUrl = new URL('nvmh_math_py-0.1.0-py3-none-any.whl', window.location.href).href;
         await pyodideInstance.runPythonAsync(`
-            import micropip
-            await micropip.install("${wheelUrl}", deps=False)
-        `);
+            from pyodide.http import pyfetch
+            import zipfile, io, sys
 
-        pyodideInstance.runPython(`
-          from nvmh_math_py.analyzer import analyze_function
-          from nvmh_math_py.geometry_ir import build_geometric_scene
-          from nvmh_math_py.svg import generate_graph_svg, generate_table_svg
-          from nvmh_math_py.tikz import generate_tkz_tab, generate_graph_tikz
-          from nvmh_math_py.typst import generate_typst_document
-          import sympy as sp
-          import json
+            resp = await pyfetch("${wheelUrl}")
+            data = await resp.bytes()
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                z.extractall("/lib/python3.12/site-packages")
+            
+            from nvmh_math_py.analyzer import analyze_function
+            from nvmh_math_py.geometry_ir import build_geometric_scene
+            from nvmh_math_py.svg import generate_graph_svg, generate_table_svg
+            from nvmh_math_py.tikz import generate_tkz_tab, generate_graph_tikz
+            from nvmh_math_py.typst import generate_typst_document
+            import sympy as sp
+            import json
         `);
 
         isPyodideReady = true;
