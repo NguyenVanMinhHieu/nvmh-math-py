@@ -246,7 +246,7 @@
         await pyodideInstance.loadPackage(['micropip', 'sympy']);
         const micropip = pyodideInstance.pyimport('micropip');
         const wheelUrl = new URL('nvmh_math_py-0.1.0-py3-none-any.whl', window.location.href).href;
-        await micropip.install(wheelUrl);
+        await micropip.install(wheelUrl, deps=false);
 
         pyodideInstance.runPython(`
           from nvmh_math_py.analyzer import analyze_function
